@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SafetyChecklistModal } from "./safety-checklist-modal";
 import { toast } from "sonner";
-import { Loader2, Package } from "lucide-react";
+import { Loader2, Package, CreditCard } from "lucide-react";
 
 interface BookingRequestFormProps {
   tripId: string;
@@ -34,6 +34,7 @@ export function BookingRequestForm({
   const [pendingData, setPendingData] = useState<BookingRequestFormData | null>(
     null
   );
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const {
     register,
@@ -61,6 +62,8 @@ export function BookingRequestForm({
     if (!pendingData) return;
 
     setError(null);
+    setIsProcessing(true);
+
     const supabase = createClient();
     const {
       data: { user },
@@ -68,6 +71,7 @@ export function BookingRequestForm({
 
     if (!user) {
       setError("You must be logged in");
+      setIsProcessing(false);
       return;
     }
 
@@ -81,32 +85,63 @@ export function BookingRequestForm({
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashedPin = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
-    const { error: insertError } = await supabase.from("parcels").insert({
-      sender_id: user.id,
-      trip_id: tripId,
-      carrier_id: carrierId,
-      title: pendingData.title,
-      description: pendingData.description || "",
-      weight_kg: pendingData.weight_kg,
-      status: "pending",
-      escrow_status: "awaiting_payment",
-      verification_pin: hashedPin,
-      sender_pin: pin,
-      total_price: pendingData.weight_kg * pricePerKg,
-    });
+    const calculatedPrice = pendingData.weight_kg * pricePerKg;
 
-    if (insertError) {
-      setError(insertError.message);
+    // Create the parcel first
+    const { data: parcel, error: insertError } = await supabase
+      .from("parcels")
+      .insert({
+        sender_id: user.id,
+        trip_id: tripId,
+        carrier_id: carrierId,
+        title: pendingData.title,
+        description: pendingData.description || "",
+        weight_kg: pendingData.weight_kg,
+        status: "pending",
+        escrow_status: "awaiting_payment",
+        verification_pin: hashedPin,
+        sender_pin: pin,
+        total_price: calculatedPrice,
+      })
+      .select()
+      .single();
+
+    if (insertError || !parcel) {
+      setError(insertError?.message || "Failed to create booking");
+      setIsProcessing(false);
       return;
     }
 
-    toast.success(
-      `Booking request sent! Your delivery PIN is: ${pin}`,
-      { duration: 15000 }
-    );
-    setShowChecklist(false);
-    router.push("/bookings");
-    router.refresh();
+    // Now redirect to Stripe checkout for the SENDER to pay
+    try {
+      const response = await fetch(`/api/bookings/${parcel.id}/sender-checkout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create checkout session");
+      }
+
+      if (result.url) {
+        // Save PIN to show after payment
+        sessionStorage.setItem(`booking_pin_${parcel.id}`, pin);
+        toast.info("Redirecting to payment...");
+        window.location.href = result.url;
+      } else {
+        throw new Error("No checkout URL received");
+      }
+    } catch (err) {
+      console.error("Checkout error:", err);
+      // Delete the parcel since payment failed to initiate
+      await supabase.from("parcels").delete().eq("id", parcel.id);
+      setError(err instanceof Error ? err.message : "Failed to initiate payment");
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -169,12 +204,15 @@ export function BookingRequestForm({
             <div className="rounded-lg bg-slate-50 p-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">
-                  Estimated Total ({weightValue || 0} kg x ${pricePerKg}/kg)
+                  Total ({weightValue || 0} kg × ${pricePerKg}/kg)
                 </span>
                 <span className="text-lg font-bold text-slate-900">
                   ${totalPrice}
                 </span>
               </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Payment is held in escrow until delivery is confirmed
+              </p>
             </div>
 
             <Button
@@ -193,8 +231,17 @@ export function BookingRequestForm({
 
       <SafetyChecklistModal
         open={showChecklist}
-        onOpenChange={setShowChecklist}
+        onOpenChange={(open) => {
+          if (!isProcessing) setShowChecklist(open);
+        }}
         onConfirm={handleConfirmBooking}
+        isProcessing={isProcessing}
+        confirmButtonText={
+          <>
+            <CreditCard className="mr-2 h-4 w-4" />
+            Pay ${totalPrice} & Book
+          </>
+        }
       />
     </>
   );

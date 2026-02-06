@@ -10,7 +10,7 @@ import {
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Menu, Package } from "lucide-react";
+import { Menu, Package, ShieldAlert } from "lucide-react";
 import type { Profile } from "@/types";
 import type { User } from "@supabase/supabase-js";
 
@@ -75,6 +75,21 @@ export function MobileNav({ user, profile }: MobileNavProps) {
               >
                 Profile
               </Link>
+
+              {/* Admin Link */}
+              {profile?.is_admin && (
+                <>
+                  <div className="my-1 h-px bg-slate-200" />
+                  <Link
+                    href={ROUTES.ADMIN}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-purple-600 hover:bg-purple-50"
+                  >
+                    <ShieldAlert className="h-4 w-4" />
+                    Admin Panel
+                  </Link>
+                </>
+              )}
             </>
           ) : (
             <>

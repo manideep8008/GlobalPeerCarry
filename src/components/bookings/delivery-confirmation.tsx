@@ -63,7 +63,7 @@ export function DeliveryConfirmation({ parcelId }: DeliveryConfirmationProps) {
     // Verify PIN by comparing hashes
     const { data: parcel } = await supabase
       .from("parcels")
-      .select("verification_pin")
+      .select("verification_pin, escrow_status")
       .eq("id", parcelId)
       .single();
 
@@ -75,12 +75,11 @@ export function DeliveryConfirmation({ parcelId }: DeliveryConfirmationProps) {
       return;
     }
 
-    // Update parcel status
+    // Update parcel status to delivered
     const { error: updateError } = await supabase
       .from("parcels")
       .update({
         status: "delivered",
-        escrow_status: "released",
       })
       .eq("id", parcelId);
 
@@ -90,7 +89,37 @@ export function DeliveryConfirmation({ parcelId }: DeliveryConfirmationProps) {
       return;
     }
 
-    toast.success("Delivery confirmed! Payment has been released.");
+    // Release payment via API if payment was held
+    if (parcel.escrow_status === "held") {
+      try {
+        const response = await fetch(`/api/bookings/${parcelId}/release-payment`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error("Failed to release payment:", result.error);
+          // Still mark as delivered, admin can handle payout manually
+          toast.success(
+            "Delivery confirmed! Payment release is being processed."
+          );
+        } else {
+          toast.success(
+            "Delivery confirmed! Payment has been released to you."
+          );
+        }
+      } catch (err) {
+        console.error("Payment release error:", err);
+        toast.success("Delivery confirmed! Payment release is being processed.");
+      }
+    } else {
+      toast.success("Delivery confirmed!");
+    }
+
     setIsSubmitting(false);
     router.refresh();
   };

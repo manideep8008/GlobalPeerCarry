@@ -9,6 +9,14 @@ export default async function MessagesPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Get blocked users
+  const { data: blockedUsers } = await supabase
+    .from("user_blocks")
+    .select("blocked_id")
+    .eq("blocker_id", user!.id);
+
+  const blockedIds = new Set((blockedUsers || []).map((b) => b.blocked_id));
+
   // Get all messages involving the user, with sender and receiver profiles
   const { data: messages } = await supabase
     .from("messages")
@@ -33,6 +41,10 @@ export default async function MessagesPage() {
     for (const msg of messages) {
       const isOwnMessage = msg.sender_id === user!.id;
       const partnerId = isOwnMessage ? msg.receiver_id : msg.sender_id;
+
+      // Skip blocked users
+      if (blockedIds.has(partnerId)) continue;
+
       const partner = isOwnMessage
         ? (msg.receiver as unknown as { full_name: string; avatar_url: string })
         : (msg.sender as unknown as { full_name: string; avatar_url: string });

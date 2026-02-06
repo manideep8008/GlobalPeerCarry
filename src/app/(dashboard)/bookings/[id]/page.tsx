@@ -6,6 +6,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EscrowStatusBadge } from "@/components/bookings/escrow-status-badge";
 import { DeliveryConfirmation } from "@/components/bookings/delivery-confirmation";
 import { BookingActions } from "@/components/bookings/booking-actions";
+import { ReviewPrompt } from "@/components/reviews/review-prompt";
+import { UserSafetyActions } from "@/components/safety/user-safety-actions";
+import { PaymentDetails } from "@/components/bookings/payment-details";
+import { PaymentSuccessHandler } from "@/components/bookings/payment-success-handler";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +18,7 @@ import {
   PARCEL_STATUS_LABELS,
   PARCEL_STATUS_COLORS,
 } from "@/lib/constants";
-import type { ParcelWithDetails } from "@/types";
+import type { ParcelWithDetails, Review } from "@/types";
 import {
   ArrowLeft,
   MapPin,
@@ -30,12 +34,17 @@ import {
 
 interface BookingDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function BookingDetailPage({
   params,
+  searchParams,
 }: BookingDetailPageProps) {
   const { id } = await params;
+  const query = await searchParams;
+  const paymentStatus = query.payment as string | undefined;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,12 +76,55 @@ export default async function BookingDetailPage({
   const sender = booking.sender;
   const carrier = booking.carrier;
 
+  // Determine the other party
+  const otherParty = isCarrier ? sender : carrier;
+  const otherPartyId = isCarrier ? booking.sender_id : booking.carrier_id;
+
+  // Fetch reviews for this booking
+  const { data: reviewsData } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("parcel_id", id);
+
+  const reviews = (reviewsData || []) as unknown as Review[];
+  const myReview = reviews.find((r) => r.reviewer_id === user?.id) || null;
+
+  // Check if current user has blocked the other party
+  let isOtherBlocked = false;
+  if (user) {
+    const { data: blockData } = await supabase
+      .from("user_blocks")
+      .select("id")
+      .eq("blocker_id", user.id)
+      .eq("blocked_id", otherPartyId)
+      .single();
+    isOtherBlocked = !!blockData;
+  }
+
   // Status timeline steps
   const steps = ["pending", "accepted", "in_transit", "delivered"];
   const currentStepIndex = steps.indexOf(booking.status);
 
+  // Check if payment exists
+  const hasPayment = !!booking.stripe_payment_intent_id || booking.escrow_status === "held" || booking.escrow_status === "released";
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* Handle payment success redirect */}
+      {paymentStatus === "success" && (
+        <PaymentSuccessHandler parcelId={id} />
+      )}
+
+      {paymentStatus === "cancelled" && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 text-center">
+            <p className="text-amber-800">
+              Payment was cancelled. You can try again by clicking Accept & Collect Payment.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center gap-2">
         <Button asChild variant="ghost" size="sm">
           <Link href="/bookings">
@@ -203,20 +255,38 @@ export default async function BookingDetailPage({
                 {isCarrier ? "Sender:" : "Carrier:"}
               </span>
               <span className="font-medium">
-                {isCarrier ? sender?.full_name : carrier?.full_name}
+                {otherParty?.full_name}
               </span>
             </div>
-            <Button asChild variant="outline" size="sm">
-              <Link
-                href={`/messages/${isCarrier ? booking.sender_id : booking.carrier_id}`}
-              >
-                <MessageSquare className="mr-1 h-4 w-4" />
-                Message
-              </Link>
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/messages/${otherPartyId}`}>
+                  <MessageSquare className="mr-1 h-4 w-4" />
+                  Message
+                </Link>
+              </Button>
+              <UserSafetyActions
+                userId={otherPartyId}
+                userName={otherParty?.full_name || "User"}
+                isBlocked={isOtherBlocked}
+                parcelId={booking.id}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Payment Details - Show when payment exists */}
+      {hasPayment && (
+        <PaymentDetails
+          totalPrice={booking.total_price}
+          escrowStatus={booking.escrow_status}
+          paidAt={booking.paid_at}
+          payoutAt={booking.payout_at}
+          stripePaymentIntentId={booking.stripe_payment_intent_id}
+          isCarrier={isCarrier}
+        />
+      )}
 
       {/* Sender PIN */}
       {isSender && booking.sender_pin && booking.status !== "delivered" && booking.status !== "cancelled" && (
@@ -244,7 +314,12 @@ export default async function BookingDetailPage({
 
       {/* Carrier Actions */}
       {isCarrier && booking.status === "pending" && (
-        <BookingActions parcelId={booking.id} tripId={booking.trip_id} weight={booking.weight_kg} />
+        <BookingActions
+          parcelId={booking.id}
+          tripId={booking.trip_id}
+          weight={booking.weight_kg}
+          escrowStatus={booking.escrow_status}
+        />
       )}
 
       {isCarrier && booking.status === "accepted" && (
@@ -252,6 +327,7 @@ export default async function BookingDetailPage({
           parcelId={booking.id}
           tripId={booking.trip_id}
           weight={booking.weight_kg}
+          escrowStatus={booking.escrow_status}
           showMarkInTransit
         />
       )}
@@ -261,13 +337,23 @@ export default async function BookingDetailPage({
       )}
 
       {booking.status === "delivered" && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-5 text-center">
-            <p className="font-semibold text-green-800">
-              Delivery confirmed! Payment has been released.
-            </p>
-          </CardContent>
-        </Card>
+        <>
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="p-5 text-center">
+              <p className="font-semibold text-green-800">
+                Delivery confirmed! Payment has been released.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Review Prompt */}
+          <ReviewPrompt
+            parcelId={booking.id}
+            revieweeId={otherPartyId}
+            revieweeName={otherParty?.full_name || "User"}
+            existingReview={myReview}
+          />
+        </>
       )}
     </div>
   );

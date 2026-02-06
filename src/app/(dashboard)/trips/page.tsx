@@ -21,6 +21,18 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   const params = await searchParams;
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Get blocked users
+  const { data: blockedUsers } = await supabase
+    .from("user_blocks")
+    .select("blocked_id")
+    .eq("blocker_id", user?.id || "");
+
+  const blockedIds = (blockedUsers || []).map((b) => b.blocked_id);
+
   let query = supabase
     .from("trips")
     .select("*, carrier:profiles!carrier_id(*)")
@@ -40,6 +52,11 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
   }
 
   const { data: trips } = await query;
+
+  // Filter out trips from blocked users
+  const filteredTrips = (trips || []).filter(
+    (trip) => !blockedIds.includes(trip.carrier_id)
+  );
 
   return (
     <div className="space-y-6">
@@ -63,9 +80,9 @@ export default async function TripsPage({ searchParams }: TripsPageProps) {
         <TripSearchFilters />
       </Suspense>
 
-      {trips && trips.length > 0 ? (
+      {filteredTrips.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {trips.map((trip) => (
+          {filteredTrips.map((trip) => (
             <TripCard key={trip.id} trip={trip as unknown as TripWithCarrier} />
           ))}
         </div>

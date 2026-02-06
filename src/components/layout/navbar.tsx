@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Package, User, LayoutDashboard } from "lucide-react";
+import { Package, User, LayoutDashboard, ShieldAlert } from "lucide-react";
 import { MobileNav } from "./mobile-nav";
 import { LogoutButton } from "./logout-button";
 
@@ -107,6 +107,17 @@ export async function Navbar() {
                       Profile
                     </Link>
                   </DropdownMenuItem>
+                  {profile?.is_admin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={ROUTES.ADMIN} className="cursor-pointer text-purple-600">
+                          <ShieldAlert className="mr-2 h-4 w-4" />
+                          Admin Panel
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <LogoutButton />
                 </DropdownMenuContent>
