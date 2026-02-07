@@ -120,6 +120,11 @@ export function DeliveryConfirmation({ parcelId }: DeliveryConfirmationProps) {
       toast.success("Delivery confirmed!");
     }
 
+    // Send notification to sender
+    fetch(`/api/bookings/${parcelId}/notify-delivered`, {
+      method: "POST",
+    }).catch(console.error);
+
     setIsSubmitting(false);
     router.refresh();
   };

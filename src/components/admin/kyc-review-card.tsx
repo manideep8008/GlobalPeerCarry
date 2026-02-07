@@ -55,6 +55,14 @@ export function KycReviewCard({ document }: KycReviewCardProps) {
       .eq("id", document.user_id);
 
     toast.success("Document approved!");
+
+    // Send notification to user
+    fetch(`/api/admin/kyc/${document.id}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved" }),
+    }).catch(console.error);
+
     setIsApproving(false);
     router.refresh();
   };
@@ -92,6 +100,14 @@ export function KycReviewCard({ document }: KycReviewCardProps) {
       .eq("id", document.user_id);
 
     toast.success("Document rejected");
+
+    // Send notification to user
+    fetch(`/api/admin/kyc/${document.id}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "rejected", reason: notes }),
+    }).catch(console.error);
+
     setIsRejecting(false);
     router.refresh();
   };

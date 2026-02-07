@@ -144,6 +144,43 @@ export interface UserBlock {
 
 export type PaymentTransactionType = "charge" | "refund" | "payout";
 
+// Notification types
+export type NotificationType =
+  | "payment_confirmed"
+  | "booking_accepted"
+  | "booking_rejected"
+  | "delivery_confirmed"
+  | "in_transit"
+  | "new_message"
+  | "kyc_approved"
+  | "kyc_rejected";
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  is_read: boolean;
+  email_sent: boolean;
+  created_at: string;
+}
+
+export interface NotificationPreferences {
+  id: string;
+  user_id: string;
+  email_payment_confirmed: boolean;
+  email_booking_accepted: boolean;
+  email_booking_rejected: boolean;
+  email_delivery_confirmed: boolean;
+  email_in_transit: boolean;
+  email_new_message: boolean;
+  email_kyc_updates: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PaymentTransaction {
   id: string;
   parcel_id: string;

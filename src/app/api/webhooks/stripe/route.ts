@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { dollarsToCents } from "@/lib/stripe/config";
+import { notifyPaymentConfirmed, notifyBookingRejected } from "@/lib/notifications/service";
 import Stripe from "stripe";
 
 // Lazy initialization to avoid build-time errors
@@ -104,10 +105,10 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  // Fetch parcel
+  // Fetch parcel with sender and carrier profiles
   const { data: parcel, error: parcelError } = await supabaseAdmin
     .from("parcels")
-    .select("*, trip:trips(*)")
+    .select("*, trip:trips(*), sender:profiles!parcels_sender_id_fkey(*), carrier:profiles!parcels_carrier_id_fkey(*)")
     .eq("id", parcelId)
     .single();
 
@@ -164,6 +165,25 @@ async function handleCheckoutCompleted(
   });
 
   console.log("Payment confirmed via webhook for parcel:", parcelId);
+
+  // Send notification to carrier about new paid booking
+  try {
+    const { data: carrierAuth } = await supabaseAdmin.auth.admin.getUserById(
+      parcel.carrier_id
+    );
+    if (carrierAuth?.user?.email && parcel.carrier && parcel.sender) {
+      await notifyPaymentConfirmed(
+        parcel.carrier_id,
+        parcel.carrier.full_name,
+        carrierAuth.user.email,
+        parcel.title,
+        parcel.sender.full_name,
+        parcelId
+      );
+    }
+  } catch (notifyError) {
+    console.error("Failed to send notification:", notifyError);
+  }
 }
 
 async function handlePaymentSucceeded(
@@ -213,7 +233,7 @@ async function handleChargeRefunded(
   // Find parcel by payment intent
   const { data: parcel, error } = await supabaseAdmin
     .from("parcels")
-    .select("id, escrow_status, total_price, trip_id, weight_kg, status")
+    .select("id, escrow_status, total_price, trip_id, weight_kg, status, sender_id, title, sender:profiles!parcels_sender_id_fkey(*)")
     .eq("stripe_payment_intent_id", paymentIntentId)
     .single();
 
@@ -277,4 +297,22 @@ async function handleChargeRefunded(
   }
 
   console.log("Refund processed via webhook for parcel:", parcel.id);
+
+  // Send notification to sender about refund
+  try {
+    const { data: senderAuth } = await supabaseAdmin.auth.admin.getUserById(
+      parcel.sender_id
+    );
+    if (senderAuth?.user?.email && parcel.sender) {
+      await notifyBookingRejected(
+        parcel.sender_id,
+        parcel.sender.full_name,
+        senderAuth.user.email,
+        parcel.title,
+        parcel.id
+      );
+    }
+  } catch (notifyError) {
+    console.error("Failed to send refund notification:", notifyError);
+  }
 }

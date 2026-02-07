@@ -19,4 +19,7 @@ export type {
   Report,
   ReportWithProfiles,
   UserBlock,
+  NotificationType,
+  Notification,
+  NotificationPreferences,
 } from "./database";

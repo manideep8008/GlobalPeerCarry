@@ -57,6 +57,11 @@ export function BookingActions({
       }
 
       toast.success("Booking accepted! Payment is held in escrow until delivery.");
+
+      // Send notification to sender
+      fetch(`/api/bookings/${parcelId}/notify-accepted`, {
+        method: "POST",
+      }).catch(console.error);
     } else {
       toast.error(error.message);
     }
@@ -122,6 +127,11 @@ export function BookingActions({
 
     if (!error) {
       toast.success("Parcel marked as in transit.");
+
+      // Send notification to sender
+      fetch(`/api/bookings/${parcelId}/notify-in-transit`, {
+        method: "POST",
+      }).catch(console.error);
     } else {
       toast.error(error.message);
     }

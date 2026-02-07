@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Package, User, LayoutDashboard, ShieldAlert } from "lucide-react";
 import { MobileNav } from "./mobile-nav";
 import { LogoutButton } from "./logout-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export async function Navbar() {
   const supabase = await createClient();
@@ -62,6 +63,7 @@ export async function Navbar() {
               >
                 Messages
               </Link>
+              <NotificationBell userId={user.id} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
