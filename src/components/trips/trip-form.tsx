@@ -11,20 +11,80 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  LocationAutocomplete,
+  type LocationResult,
+} from "@/components/maps/location-autocomplete";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+
+interface LocationData {
+  name: string;
+  lat: number | null;
+  lng: number | null;
+}
 
 export function TripForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+
+  // Location state with coordinates
+  const [originData, setOriginData] = useState<LocationData>({
+    name: "",
+    lat: null,
+    lng: null,
+  });
+  const [destinationData, setDestinationData] = useState<LocationData>({
+    name: "",
+    lat: null,
+    lng: null,
+  });
+
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<TripFormData>({
     resolver: zodResolver(tripSchema) as any,
   });
+
+  const handleOriginChange = (location: LocationResult | null) => {
+    if (location) {
+      const shortName = location.city
+        ? `${location.city}, ${location.country}`
+        : location.display_name.split(",").slice(0, 2).join(",");
+
+      setOriginData({
+        name: shortName,
+        lat: location.lat,
+        lng: location.lng,
+      });
+      setValue("origin", shortName);
+    } else {
+      setOriginData({ name: "", lat: null, lng: null });
+      setValue("origin", "");
+    }
+  };
+
+  const handleDestinationChange = (location: LocationResult | null) => {
+    if (location) {
+      const shortName = location.city
+        ? `${location.city}, ${location.country}`
+        : location.display_name.split(",").slice(0, 2).join(",");
+
+      setDestinationData({
+        name: shortName,
+        lat: location.lat,
+        lng: location.lng,
+      });
+      setValue("destination", shortName);
+    } else {
+      setDestinationData({ name: "", lat: null, lng: null });
+      setValue("destination", "");
+    }
+  };
 
   const onSubmit = async (data: TripFormData) => {
     setError(null);
@@ -40,8 +100,12 @@ export function TripForm() {
 
     const { error: insertError } = await supabase.from("trips").insert({
       carrier_id: user.id,
-      origin: data.origin,
-      destination: data.destination,
+      origin: originData.name || data.origin,
+      destination: destinationData.name || data.destination,
+      origin_lat: originData.lat,
+      origin_lng: originData.lng,
+      destination_lat: destinationData.lat,
+      destination_lng: destinationData.lng,
       travel_date: data.travel_date,
       total_weight_kg: data.total_weight_kg,
       available_weight_kg: data.total_weight_kg,
@@ -76,29 +140,27 @@ export function TripForm() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="origin">Origin</Label>
-              <Input
-                id="origin"
+              <LocationAutocomplete
+                value={originData.name}
+                onChange={handleOriginChange}
                 placeholder="e.g., New York, USA"
-                {...register("origin")}
+                label="Origin"
+                error={errors.origin?.message}
               />
-              {errors.origin && (
-                <p className="text-xs text-red-500">{errors.origin.message}</p>
-              )}
+              {/* Hidden input for form validation */}
+              <input type="hidden" {...register("origin")} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="destination">Destination</Label>
-              <Input
-                id="destination"
+              <LocationAutocomplete
+                value={destinationData.name}
+                onChange={handleDestinationChange}
                 placeholder="e.g., Mumbai, India"
-                {...register("destination")}
+                label="Destination"
+                error={errors.destination?.message}
               />
-              {errors.destination && (
-                <p className="text-xs text-red-500">
-                  {errors.destination.message}
-                </p>
-              )}
+              {/* Hidden input for form validation */}
+              <input type="hidden" {...register("destination")} />
             </div>
           </div>
 

@@ -39,6 +39,10 @@ export interface Trip {
   carrier_id: string;
   origin: string;
   destination: string;
+  origin_lat: number | null;
+  origin_lng: number | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
   travel_date: string;
   total_weight_kg: number;
   available_weight_kg: number;
