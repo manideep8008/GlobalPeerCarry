@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EarningsSummaryCard } from "@/components/earnings/earnings-summary-card";
+import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
 import {
   Plane,
   Package,
@@ -36,6 +38,31 @@ export default async function DashboardPage() {
     .eq("receiver_id", user!.id)
     .eq("is_read", false);
 
+  // Get earnings data
+  const payoutMultiplier = 1 - PLATFORM_FEE_PERCENT / 100;
+
+  const { data: releasedParcels } = await supabase
+    .from("parcels")
+    .select("total_price")
+    .eq("carrier_id", user!.id)
+    .eq("escrow_status", "released");
+
+  const totalEarnings = (releasedParcels || []).reduce(
+    (sum, p) => sum + p.total_price * payoutMultiplier,
+    0
+  );
+
+  const { data: heldParcels } = await supabase
+    .from("parcels")
+    .select("total_price")
+    .eq("carrier_id", user!.id)
+    .eq("escrow_status", "held");
+
+  const pendingPayout = (heldParcels || []).reduce(
+    (sum, p) => sum + p.total_price * payoutMultiplier,
+    0
+  );
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -44,7 +71,7 @@ export default async function DashboardPage() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Trips</CardTitle>
@@ -83,6 +110,10 @@ export default async function DashboardPage() {
             <p className="text-xs text-muted-foreground">New messages</p>
           </CardContent>
         </Card>
+        <EarningsSummaryCard
+          totalEarnings={totalEarnings}
+          pendingPayout={pendingPayout}
+        />
       </div>
 
       {/* Quick Actions */}

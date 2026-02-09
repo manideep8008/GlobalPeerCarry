@@ -62,6 +62,13 @@ export function MobileNav({ user, profile }: MobileNavProps) {
                 My Bookings
               </Link>
               <Link
+                href="/earnings"
+                onClick={() => setOpen(false)}
+                className="rounded-md px-2 py-2 text-sm font-medium hover:bg-accent"
+              >
+                Earnings
+              </Link>
+              <Link
                 href={ROUTES.MESSAGES}
                 onClick={() => setOpen(false)}
                 className="rounded-md px-2 py-2 text-sm font-medium hover:bg-accent"

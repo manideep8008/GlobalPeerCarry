@@ -13,6 +13,7 @@ import {
   User,
   PlusCircle,
   ShieldAlert,
+  DollarSign,
 } from "lucide-react";
 
 const sidebarLinks = [
@@ -20,6 +21,7 @@ const sidebarLinks = [
   { href: ROUTES.NEW_TRIP, label: "Post a Trip", icon: PlusCircle },
   { href: ROUTES.TRIPS, label: "Browse Trips", icon: Search },
   { href: ROUTES.BOOKINGS, label: "My Bookings", icon: Package },
+  { href: "/earnings", label: "Earnings", icon: DollarSign },
   { href: ROUTES.MESSAGES, label: "Messages", icon: MessageSquare },
   { href: ROUTES.PROFILE, label: "Profile", icon: User },
 ];
